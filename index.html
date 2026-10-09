@@ -546,7 +546,7 @@
                                         }
                                     }
 
-                                    const isCurrent = index === input.length && status !== 'finished';
+                                    const isCurrent = isStarted && index === input.length && status !== 'finished';
 
                                     return (
                                         <span key={index} className="relative inline-block">
