@@ -354,6 +354,7 @@
                 const randomText = samples[Math.floor(Math.random() * samples.length)];
                 setText(randomText);
                 setInput('');
+                if (inputRef.current) inputRef.current.value = '';
                 setStatus('idle');
                 setTimeLeft(60);
                 setIsStarted(false);
@@ -564,7 +565,6 @@
                                 ref={inputRef}
                                 type="text"
                                 className="typing-input"
-                                value={input}
                                 onChange={handleInput}
                                 onCompositionStart={handleCompositionStart}
                                 onCompositionEnd={handleCompositionEnd}
