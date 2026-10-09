@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TypeMaster Pro - Symmetric Training</title>
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+            color: #0f172a;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+        .animate-blink {
+            animation: blink 1s step-end infinite;
+        }
+
+        .key-base {
+            position: absolute;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.375rem;
+            background-color: #ffffff;
+            color: #64748b;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            transition: all 0.15s ease-out;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+            border-bottom: 3px solid #cbd5e1;
+            user-select: none;
+            text-transform: lowercase;
+        }
+        
+        .key-active {
+            background-color: #3b82f6 !important;
+            color: white !important;
+            transform: translateY(2px);
+            border-bottom: 1px solid #2563eb;
+            box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
+            font-weight: bold;
+        }
+
+        .finger-capsule {
+            position: absolute;
+            width: 20px;
+            height: 54px;
+            border-radius: 9999px;
+            background-color: rgba(245, 203, 186, 0.4);
+            border: 2px solid rgba(212, 163, 144, 0.5);
+            transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), 
+                        background-color 0.15s ease, 
+                        border-color 0.15s ease,
+                        box-shadow 0.15s ease;
+            transform-origin: center center;
+            z-index: 30;
+        }
+
+        .finger-active {
+            background-color: rgba(59, 130, 246, 0.6);
+            border-color: rgba(29, 78, 216, 0.7);
+            box-shadow: 0 0 16px rgba(59, 130, 246, 0.4);
+            z-index: 40;
+        }
+
+        .palm-shape {
+            position: absolute;
+            background-color: rgba(245, 203, 186, 0.4);
+            border: 2px solid rgba(212, 163, 144, 0.5);
+            box-shadow: 0 4px 10px -4px rgba(0,0,0,0.1);
+            z-index: 20;
+            width: 150px;
+            height: 140px;
+        }
+
+        /* Mathematically exact mirrored border-radii for perfect symmetry */
+        .palm-left {
+            border-radius: 35% 20% 60% 40%;
+            transform: rotate(12deg);
+        }
+
+        .palm-right {
+            border-radius: 20% 35% 40% 60%;
+            transform: rotate(-12deg);
+        }
+
+        .typing-input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            z-index: 10;
+            cursor: text;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const TEXT_SAMPLES = {
+            en: [
+                "Hello, Ms Gao! I'm Peter Brown. Thank you. Nice to meet you! Welcome to our school.",
+                "I get up at 6:00 a.m. Then I brush my teeth and wash my face. At 6:30, I have breakfast with my parents. I go to school at 7:20. School starts at 8:00.",
+                "Do you want to make new friends? Come and join our clubs! Can you sing or dance? Can you play the piano or the violin? Mr. Wang teaches us every Friday afternoon.",
+                "My name is Liu Yu. I am a student in Grade 7. My favourite subject is English. I like reading books and playing basketball with my friends after school."
+            ],
+            zh: [
+                "吹面不寒杨柳风，不错的，像母亲的手抚摸着你。风里带来些新翻的泥土的气息，混着青草味儿，还有各种花的香，都在微微润湿的空气里酝酿。",
+                "小山整把济南围了个圈儿，只有北边缺着点儿口儿。这一圈小山在冬天特别可爱，好像是把济南放在一个小摇篮里，它们全安静不动地低声地说：你们放心吧，这儿准保暖和。",
+                "这南方初春的田野，大块小块的新绿随意地铺着，有的浓，有的淡，树上的嫩芽也密了，田里的冬水也咕咕地起着水泡。这一切都使人想着一样东西——生命。",
+                "那天我又独自坐在屋里，看着窗外的树叶唰唰拉拉地飘落。母亲进来了，挡在窗前：北海的菊花开了，我推着你去看看吧。她憔悴的脸上现出央求般的神色。"
+            ]
+        };
+
+        // Strict 800px width Layout. 
+        // Rows: y=0, 54, 108, 162, 216. Keys standard width 48, gap 6 (step 54).
+        const KEY_DATA = [
+            // Row 0
+            { id: '`', label: '~ `', x: 0, y: 0, w: 48 }, { id: '1', label: '! 1', x: 54, y: 0, w: 48 },
+            { id: '2', label: '@ 2', x: 108, y: 0, w: 48 }, { id: '3', label: '# 3', x: 162, y: 0, w: 48 },
+            { id: '4', label: '$ 4', x: 216, y: 0, w: 48 }, { id: '5', label: '% 5', x: 270, y: 0, w: 48 },
+            { id: '6', label: '^ 6', x: 324, y: 0, w: 48 }, { id: '7', label: '& 7', x: 378, y: 0, w: 48 },
+            { id: '8', label: '* 8', x: 432, y: 0, w: 48 }, { id: '9', label: '( 9', x: 486, y: 0, w: 48 },
+            { id: '0', label: ') 0', x: 540, y: 0, w: 48 }, { id: '-', label: '_ -', x: 594, y: 0, w: 48 },
+            { id: '=', label: '+ =', x: 648, y: 0, w: 48 }, { id: 'backspace', label: 'Backspace', x: 702, y: 0, w: 96 },
+            
+            // Row 1
+            { id: 'tab', label: 'Tab', x: 0, y: 54, w: 76 }, { id: 'q', label: 'Q', x: 82, y: 54, w: 48 },
+            { id: 'w', label: 'W', x: 136, y: 54, w: 48 }, { id: 'e', label: 'E', x: 190, y: 54, w: 48 },
+            { id: 'r', label: 'R', x: 244, y: 54, w: 48 }, { id: 't', label: 'T', x: 298, y: 54, w: 48 },
+            { id: 'y', label: 'Y', x: 352, y: 54, w: 48 }, { id: 'u', label: 'U', x: 406, y: 54, w: 48 },
+            { id: 'i', label: 'I', x: 460, y: 54, w: 48 }, { id: 'o', label: 'O', x: 514, y: 54, w: 48 },
+            { id: 'p', label: 'P', x: 568, y: 54, w: 48 }, { id: '[', label: '{ [', x: 622, y: 54, w: 48 },
+            { id: ']', label: '} ]', x: 676, y: 54, w: 48 }, { id: '\\', label: '| \\', x: 730, y: 54, w: 68 },
+            
+            // Row 2 (Home Row)
+            { id: 'caps', label: 'Caps Lock', x: 0, y: 108, w: 94 }, { id: 'a', label: 'A', x: 100, y: 108, w: 48 },
+            { id: 's', label: 'S', x: 154, y: 108, w: 48 }, { id: 'd', label: 'D', x: 208, y: 108, w: 48 },
+            { id: 'f', label: 'F', x: 262, y: 108, w: 48 }, { id: 'g', label: 'G', x: 316, y: 108, w: 48 },
+            { id: 'h', label: 'H', x: 370, y: 108, w: 48 }, { id: 'j', label: 'J', x: 424, y: 108, w: 48 },
+            { id: 'k', label: 'K', x: 478, y: 108, w: 48 }, { id: 'l', label: 'L', x: 532, y: 108, w: 48 },
+            { id: ';', label: ': ;', x: 586, y: 108, w: 48 }, { id: "'", label: '" \'', x: 640, y: 108, w: 48 },
+            { id: 'enter', label: 'Enter', x: 694, y: 108, w: 104 },
+            
+            // Row 3
+            { id: 'shift-l', label: 'Shift', x: 0, y: 162, w: 118 }, { id: 'z', label: 'Z', x: 124, y: 162, w: 48 },
+            { id: 'x', label: 'X', x: 178, y: 162, w: 48 }, { id: 'c', label: 'C', x: 232, y: 162, w: 48 },
+            { id: 'v', label: 'V', x: 286, y: 162, w: 48 }, { id: 'b', label: 'B', x: 340, y: 162, w: 48 },
+            { id: 'n', label: 'N', x: 394, y: 162, w: 48 }, { id: 'm', label: 'M', x: 448, y: 162, w: 48 },
+            { id: ',', label: '< ,', x: 502, y: 162, w: 48 }, { id: '.', label: '> .', x: 556, y: 162, w: 48 },
+            { id: '/', label: '? /', x: 610, y: 162, w: 48 }, { id: 'shift-r', label: 'Shift', x: 664, y: 162, w: 134 },
+            
+            // Row 4
+            { id: 'ctrl-l', label: 'Ctrl', x: 0, y: 216, w: 68 }, { id: 'win-l', label: 'Win', x: 74, y: 216, w: 68 },
+            { id: 'alt-l', label: 'Alt', x: 148, y: 216, w: 68 }, { id: ' ', label: '', x: 222, y: 216, w: 350 },
+            { id: 'alt-r', label: 'Alt', x: 578, y: 216, w: 68 }, { id: 'win-r', label: 'Win', x: 652, y: 216, w: 68 },
+            { id: 'ctrl-r', label: 'Ctrl', x: 726, y: 216, w: 72 }
+        ];
+
+        const KEY_CENTERS = {};
+        KEY_DATA.forEach(key => {
+            KEY_CENTERS[key.id] = [key.x + (key.w / 2), key.y + 24]; // 24 = half of 48px standard key height
+        });
+
+        // Precise default resting positions (Centers of Home Keys)
+        const spaceCenterX = KEY_CENTERS[' '][0];
+        const spaceCenterY = KEY_CENTERS[' '][1];
+        
+        const FINGER_HOMES = {
+            'l-pinky': KEY_CENTERS['a'],
+            'l-ring': KEY_CENTERS['s'],
+            'l-middle': KEY_CENTERS['d'],
+            'l-index': KEY_CENTERS['f'],
+            'l-thumb': [spaceCenterX - 45, spaceCenterY],
+            
+            'r-thumb': [spaceCenterX + 45, spaceCenterY],
+            'r-index': KEY_CENTERS['j'],
+            'r-middle': KEY_CENTERS['k'],
+            'r-ring': KEY_CENTERS['l'],
+            'r-pinky': KEY_CENTERS[';'],
+        };
+
+        // Determine if character requires shift, and what the base key is
+        const getTargetKeysData = (char) => {
+            if (!char) return [];
+            
+            // Highlight right thumb for the Spacebar (Standard touch typing)
+            if (char === ' ') {
+                return [
+                    { keyId: ' ', fingerId: 'r-thumb' }
+                ];
+            }
+            
+            const isUpper = /[A-Z]/.test(char);
+            const shiftMap = {
+                '~':'`', '!':'1', '@':'2', '#':'3', '$':'4', '%':'5', '^':'6', '&':'7', '*':'8', '(':'9', ')':'0', '_':'-', '+':'=',
+                '{':'[', '}':']', '|':'\\', ':':';', '"':"'", '<':',', '>':'.', '?':'/'
+            };
+            const isSymbolShift = char in shiftMap;
+            const needsShift = isUpper || isSymbolShift;
+            
+            const baseChar = isUpper ? char.toLowerCase() : (isSymbolShift ? shiftMap[char] : char);
+
+            const fingerMap = {
+                '`': 'l-pinky', '1': 'l-pinky', 'q': 'l-pinky', 'a': 'l-pinky', 'z': 'l-pinky',
+                '2': 'l-ring', 'w': 'l-ring', 's': 'l-ring', 'x': 'l-ring',
+                '3': 'l-middle', 'e': 'l-middle', 'd': 'l-middle', 'c': 'l-middle',
+                '4': 'l-index', '5': 'l-index', 'r': 'l-index', 't': 'l-index', 'f': 'l-index', 'g': 'l-index', 'v': 'l-index', 'b': 'l-index',
+                
+                '6': 'r-index', '7': 'r-index', 'y': 'r-index', 'u': 'r-index', 'h': 'r-index', 'j': 'r-index', 'n': 'r-index', 'm': 'r-index',
+                '8': 'r-middle', 'i': 'r-middle', 'k': 'r-middle', ',': 'r-middle',
+                '9': 'r-ring', 'o': 'r-ring', 'l': 'r-ring', '.': 'r-ring',
+                '0': 'r-pinky', '-': 'r-pinky', '=': 'r-pinky', 'p': 'r-pinky', '[': 'r-pinky', ']': 'r-pinky', '\\': 'r-pinky', ';': 'r-pinky', '\'': 'r-pinky', '/': 'r-pinky',
+            };
+
+            const baseFinger = fingerMap[baseChar];
+            if (!baseFinger) return [];
+
+            let targets = [{ keyId: baseChar, fingerId: baseFinger }];
+
+            // Touch typing rule: use Shift on the OPPOSITE side
+            if (needsShift) {
+                if (baseFinger.startsWith('l-')) {
+                    targets.push({ keyId: 'shift-r', fingerId: 'r-pinky' });
+                } else {
+                    targets.push({ keyId: 'shift-l', fingerId: 'l-pinky' });
+                }
+            }
+
+            return targets;
+        };
+
+        const VirtualKeyboard = ({ targetKeys }) => {
+            return (
+                <div className="relative w-[798px] h-[264px] mx-auto z-10">
+                    {KEY_DATA.map((key) => {
+                        const isActive = targetKeys.some(t => t.keyId === key.id);
+                        return (
+                            <div
+                                key={key.id}
+                                className={`key-base ${isActive ? 'key-active' : ''}`}
+                                style={{
+                                    left: `${key.x}px`,
+                                    top: `${key.y}px`,
+                                    width: `${key.w}px`,
+                                    height: '48px'
+                                }}
+                            >
+                                {key.id === ' ' ? '' : key.label}
+                            </div>
+                        );
+                    })}
+                </div>
+            );
+        };
+
+        const AnimatedHands = ({ targetKeys }) => {
+            return (
+                <div className="absolute inset-0 pointer-events-none z-20">
+                    {/* Symmetrical Palms Base (Offset 134px left, 514px right to be exactly symmetrical on the 798px width canvas) */}
+                    <div className="palm-shape palm-left" style={{ left: '134px', top: '196px' }}></div>
+                    <div className="palm-shape palm-right" style={{ left: '514px', top: '196px' }}></div>
+
+                    {/* Rendering 10 Fingers */}
+                    {Object.keys(FINGER_HOMES).map(fingerId => {
+                        const [homeX, homeY] = FINGER_HOMES[fingerId];
+                        
+                        // Check if this specific finger needs to move
+                        const targetData = targetKeys.find(t => t.fingerId === fingerId);
+                        
+                        let dX = 0;
+                        let dY = 0;
+                        
+                        if (targetData && KEY_CENTERS[targetData.keyId]) {
+                            const [targetX, targetY] = KEY_CENTERS[targetData.keyId];
+                            dX = targetX - homeX;
+                            dY = targetY - homeY;
+                        }
+
+                        // Static rotation per finger to make the hand look perfectly symmetrical and natural
+                        let rotation = '0deg';
+                        if (fingerId === 'l-thumb') rotation = '40deg';
+                        if (fingerId === 'r-thumb') rotation = '-40deg';
+                        if (fingerId === 'l-index') rotation = '5deg';
+                        if (fingerId === 'r-index') rotation = '-5deg';
+                        if (fingerId === 'l-pinky') rotation = '-5deg';
+                        if (fingerId === 'r-pinky') rotation = '5deg';
+
+                        // Align center of finger capsule over the point
+                        const capsuleW = 20;
+                        const defaultLeft = homeX - (capsuleW / 2);
+                        const defaultTop = homeY - 15; // Set tip slightly above center
+
+                        return (
+                            <div
+                                key={fingerId}
+                                className={`finger-capsule ${targetData ? 'finger-active' : ''}`}
+                                style={{
+                                    left: `${defaultLeft}px`,
+                                    top: `${defaultTop}px`,
+                                    transform: `translate(${dX}px, ${dY}px) rotate(${rotation})`
+                                }}
+                            />
+                        );
+                    })}
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [language, setLanguage] = useState('en');
+            const [mode, setMode] = useState('train'); 
+            
+            const [text, setText] = useState('');
+            const [input, setInput] = useState('');
+            const [status, setStatus] = useState('idle');
+            const [timeLeft, setTimeLeft] = useState(60);
+            const [isStarted, setIsStarted] = useState(false);
+            const isComposing = useRef(false);
+
+            const inputRef = useRef(null);
+
+            const initTest = () => {
+                const samples = TEXT_SAMPLES[language];
+                const randomText = samples[Math.floor(Math.random() * samples.length)];
+                setText(randomText);
+                setInput('');
+                setStatus('idle');
+                setTimeLeft(60);
+                setIsStarted(false);
+            };
+
+            useEffect(() => {
+                initTest();
+            }, [language, mode]);
+
+            useEffect(() => {
+                let timer;
+                if (status === 'running' && timeLeft > 0) {
+                    timer = setInterval(() => {
+                        setTimeLeft(prev => {
+                            if (prev <= 1) {
+                                setStatus('finished');
+                                return 0;
+                            }
+                            return prev - 1;
+                        });
+                    }, 1000);
+                }
+                return () => clearInterval(timer);
+            }, [status, timeLeft]);
+
+            const handleInput = (e) => {
+                if (!isStarted || status === 'finished') return;
+                if (isComposing.current) return;
+
+                const val = e.target.value;
+                if (status === 'idle' && val.length > 0) {
+                    setStatus('running');
+                }
+
+                setInput(val);
+
+                if (val === text) {
+                    setStatus('finished');
+                }
+            };
+
+            const handleCompositionStart = () => {
+                isComposing.current = true;
+            };
+
+            const handleCompositionEnd = (e) => {
+                isComposing.current = false;
+                if (!isStarted || status === 'finished') return;
+
+                const val = e.target.value;
+                if (status === 'idle' && val.length > 0) {
+                    setStatus('running');
+                }
+
+                setInput(val);
+
+                if (val === text) {
+                    setStatus('finished');
+                }
+            };
+
+            const calculateMetrics = () => {
+                let correct = 0;
+                for (let i = 0; i < input.length; i++) {
+                    if (input[i] === text[i]) correct++;
+                }
+
+                const accuracy = input.length > 0 ? Math.round((correct / input.length) * 100) : 100;
+                const minutesPassed = (60 - timeLeft) / 60;
+                let speed = 0;
+                
+                if (minutesPassed > 0) {
+                    if (language === 'en') {
+                        // Standard WPM calculation (5 chars = 1 word)
+                        speed = Math.round((correct / 5) / minutesPassed);
+                    } else {
+                        // CPM for Chinese characters
+                        speed = Math.round(correct / minutesPassed);
+                    }
+                }
+
+                return { speed, accuracy };
+            };
+
+            const { speed, accuracy } = calculateMetrics();
+            
+            // Logic for the visual guides
+            const nextChar = text[input.length] || '';
+            let targetKeysData = [];
+            
+            // Only calculate and highlight target keys if the training has started
+            if (isStarted && mode === 'train' && status !== 'finished' && language === 'en') {
+                targetKeysData = getTargetKeysData(nextChar);
+            }
+
+            return (
+                <div className="min-h-screen flex flex-col items-center py-10 px-4">
+                    
+                    {/* Top Bar Controls */}
+                    <div className="w-full max-w-5xl flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-2xl shadow-md">
+                                T
+                            </div>
+                            <h1 className="text-2xl font-black text-slate-800 tracking-tight">TypeMaster Pro</h1>
+                        </div>
+
+                        <div className="flex gap-4">
+                            <div className="flex bg-white rounded-lg p-1 shadow-sm border border-slate-200">
+                                <button onClick={() => setLanguage('en')} className={`px-5 py-1.5 rounded-md text-sm font-semibold transition ${language === 'en' ? 'bg-slate-800 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}>
+                                    English
+                                </button>
+                                <button onClick={() => setLanguage('zh')} className={`px-5 py-1.5 rounded-md text-sm font-semibold transition ${language === 'zh' ? 'bg-slate-800 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}>
+                                    中文
+                                </button>
+                            </div>
+
+                            <div className="flex bg-white rounded-lg p-1 shadow-sm border border-slate-200">
+                                <button onClick={() => setMode('test')} className={`px-5 py-1.5 rounded-md text-sm font-semibold transition ${mode === 'test' ? 'bg-blue-600 text-white shadow' : 'text-slate-500 hover:text-blue-600'}`}>
+                                    Test
+                                </button>
+                                <button onClick={() => setMode('train')} className={`px-5 py-1.5 rounded-md text-sm font-semibold transition ${mode === 'train' ? 'bg-blue-600 text-white shadow' : 'text-slate-500 hover:text-blue-600'}`}>
+                                    Train
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="w-full max-w-5xl bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden relative">
+                        
+                        {/* Live Statistics */}
+                        <div className="bg-slate-50 border-b border-slate-100 p-6 flex justify-between items-center z-20 relative">
+                            <div className="flex gap-8">
+                                <div>
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'WPM' : 'CPM'}</p>
+                                    <p className="text-4xl font-black text-slate-800">{speed}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Accuracy</p>
+                                    <p className="text-4xl font-black text-slate-800">{accuracy}%</p>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-6">
+                                <div className="text-right">
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Timer</p>
+                                    <p className={`text-4xl font-black ${timeLeft <= 10 && timeLeft > 0 ? 'text-red-500' : 'text-slate-800'}`}>
+                                        {timeLeft}s
+                                    </p>
+                                </div>
+                                <button onClick={initTest} className="p-3 bg-white rounded-xl text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition shadow-sm border border-slate-200" title="Restart">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Text Display Area with strict whitespace handling */}
+                        <div className="p-8 md:p-12 relative min-h-[220px] bg-white cursor-text" onClick={() => isStarted && inputRef.current?.focus()}>
+                            
+                            {/* Start Training Overlay */}
+                            {!isStarted && (
+                                <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px] z-30 flex items-center justify-center">
+                                    <button 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setIsStarted(true);
+                                            // Small delay ensures the input is enabled before focusing
+                                            setTimeout(() => inputRef.current?.focus(), 10);
+                                        }}
+                                        className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xl font-bold rounded-xl shadow-lg hover:shadow-blue-500/40 transition-all active:scale-95 flex items-center gap-3"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9V3z"/></svg>
+                                        {language === 'en' ? 'Start Training' : '开始训练'}
+                                    </button>
+                                </div>
+                            )}
+
+                            <div className={`text-2xl md:text-3xl font-mono leading-[1.8] tracking-wide relative z-20 transition-opacity whitespace-pre-wrap break-words ${status === 'finished' ? 'opacity-30' : 'opacity-100'}`}>
+                                {text.split('').map((char, index) => {
+                                    let charColor = "text-slate-300";
+                                    let charBg = "";
+                                    
+                                    if (index < input.length) {
+                                        if (input[index] === char) {
+                                            charColor = "text-slate-800 font-bold";
+                                        } else {
+                                            charColor = "text-red-500 font-bold";
+                                            charBg = "bg-red-100/50 rounded";
+                                        }
+                                    }
+
+                                    const isCurrent = index === input.length && status !== 'finished';
+
+                                    return (
+                                        <span key={index} className="relative inline-block">
+                                            {isCurrent && (
+                                                <span className="absolute left-0 -bottom-1 w-full h-[3px] bg-blue-500 animate-blink rounded-full"></span>
+                                            )}
+                                            <span className={`${charColor} ${charBg} transition-colors duration-100`}>
+                                                {char === ' ' ? '\u00A0' : char}
+                                            </span>
+                                        </span>
+                                    );
+                                })}
+                            </div>
+
+                            <input
+                                ref={inputRef}
+                                type="text"
+                                className="typing-input"
+                                value={input}
+                                onChange={handleInput}
+                                onCompositionStart={handleCompositionStart}
+                                onCompositionEnd={handleCompositionEnd}
+                                disabled={!isStarted || status === 'finished'}
+                                spellCheck="false"
+                                autoComplete="off"
+                            />
+                        </div>
+
+                        {/* Interactive Symmetrical Training Area */}
+                        {mode === 'train' && status !== 'finished' && (
+                            <div className="bg-slate-100 border-t border-slate-200 py-12 relative overflow-x-auto flex justify-center shadow-inner">
+                                {language === 'zh' && (
+                                    <div className="absolute top-4 right-6 text-xs font-bold text-amber-600 bg-amber-100 px-4 py-1.5 rounded-md border border-amber-300 z-50">
+                                        Hand guides are hidden in Chinese mode
+                                    </div>
+                                )}
+                                {/* Fixed container size ensures perfect absolute coordinate alignment */}
+                                <div className="relative w-[798px] h-[320px] shrink-0">
+                                    <VirtualKeyboard targetKeys={targetKeysData} />
+                                    {language === 'en' && (
+                                        <AnimatedHands targetKeys={targetKeysData} />
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Final Result Overlay */}
+                        {status === 'finished' && (
+                            <div className="absolute inset-0 bg-white/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center text-center p-8">
+                                <div className="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mb-6 shadow-inner">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                </div>
+                                <h2 className="text-4xl font-black text-slate-800 mb-4 tracking-tight">Time's Up!</h2>
+                                <div className="flex gap-8 mb-8 text-left">
+                                    <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 shadow-sm">
+                                        <p className="text-xs font-bold text-slate-400 uppercase mb-1 tracking-widest">Final Speed</p>
+                                        <p className="text-5xl font-black text-blue-600">{speed} <span className="text-lg text-slate-500 font-bold">{language === 'en' ? 'WPM' : 'CPM'}</span></p>
+                                    </div>
+                                    <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 shadow-sm">
+                                        <p className="text-xs font-bold text-slate-400 uppercase mb-1 tracking-widest">Accuracy</p>
+                                        <p className="text-5xl font-black text-blue-600">{accuracy}%</p>
+                                    </div>
+                                </div>
+                                <button onClick={initTest} className="px-12 py-4 bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold rounded-xl shadow-lg hover:shadow-blue-500/40 transition-all active:scale-95">
+                                    Start New Test
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
