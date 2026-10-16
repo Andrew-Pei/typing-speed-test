@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TypeMaster Pro - Symmetric Training</title>
+    <title>TypeMaster</title>
     
     <!-- React & ReactDOM -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
@@ -450,6 +450,22 @@
                 targetKeysData = getTargetKeysData(nextChar);
             }
 
+            // Group characters into tokens so a whole word stays on one line while CJK characters
+            // and spaces remain individually breakable
+            const CJK_CHAR = /[\u2E80-\u9FFF\u3000-\u303F\uFF00-\uFFEF]/;
+            const textTokens = [];
+            text.split('').forEach((char, index) => {
+                const prevToken = textTokens[textTokens.length - 1];
+                const isSpace = char === ' ';
+                const isCjk = CJK_CHAR.test(char);
+
+                if (prevToken && !prevToken.isSpace && !prevToken.isCjk && !isSpace && !isCjk) {
+                    prevToken.chars.push({ char, index });
+                } else {
+                    textTokens.push({ key: index, isSpace, isCjk, chars: [{ char, index }] });
+                }
+            });
+
             return (
                 <div className="min-h-screen flex flex-col items-center py-10 px-4">
                     
@@ -459,7 +475,7 @@
                             <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-2xl shadow-md">
                                 T
                             </div>
-                            <h1 className="text-2xl font-black text-slate-800 tracking-tight">TypeMaster Pro</h1>
+                            <h1 className="text-2xl font-black text-slate-800 tracking-tight">TypeMaster</h1>
                         </div>
 
                         <div className="flex gap-4">
@@ -483,24 +499,24 @@
                         </div>
                     </div>
 
-                    <div className="w-full max-w-5xl bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden relative">
+                    <div className={`w-full max-w-5xl bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden relative ${status === 'finished' ? 'min-h-[480px]' : ''}`}>
                         
                         {/* Live Statistics */}
                         <div className="bg-slate-50 border-b border-slate-100 p-6 flex justify-between items-center z-20 relative">
                             <div className="flex gap-8">
                                 <div>
-                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'WPM' : 'CPM'}</p>
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'WPM' : '字/分钟'}</p>
                                     <p className="text-4xl font-black text-slate-800">{speed}</p>
                                 </div>
                                 <div>
-                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Accuracy</p>
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Accuracy' : '准确率'}</p>
                                     <p className="text-4xl font-black text-slate-800">{accuracy}%</p>
                                 </div>
                             </div>
                             
                             <div className="flex items-center gap-6">
                                 <div className="text-right">
-                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Timer</p>
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{language === 'en' ? 'Timer' : '计时'}</p>
                                     <p className={`text-4xl font-black ${timeLeft <= 10 && timeLeft > 0 ? 'text-red-500' : 'text-slate-800'}`}>
                                         {timeLeft}s
                                     </p>
@@ -533,32 +549,36 @@
                             )}
 
                             <div className={`text-2xl md:text-3xl font-mono leading-[1.8] tracking-wide relative z-20 transition-opacity whitespace-pre-wrap break-words ${status === 'finished' ? 'opacity-30' : 'opacity-100'}`}>
-                                {text.split('').map((char, index) => {
-                                    let charColor = "text-slate-300";
-                                    let charBg = "";
-                                    
-                                    if (index < input.length) {
-                                        if (input[index] === char) {
-                                            charColor = "text-slate-800 font-bold";
-                                        } else {
-                                            charColor = "text-red-500 font-bold";
-                                            charBg = "bg-red-100/50 rounded";
-                                        }
-                                    }
+                                {textTokens.map((token) => (
+                                    <span key={token.key} className={!token.isSpace && !token.isCjk ? 'inline-block whitespace-pre' : ''}>
+                                        {token.chars.map(({ char, index }) => {
+                                            let charColor = "text-slate-300";
+                                            let charBg = "";
+                                            
+                                            if (index < input.length) {
+                                                if (input[index] === char) {
+                                                    charColor = "text-slate-800 font-bold";
+                                                } else {
+                                                    charColor = "text-red-500 font-bold";
+                                                    charBg = "bg-red-100/50 rounded";
+                                                }
+                                            }
 
-                                    const isCurrent = isStarted && index === input.length && status !== 'finished';
+                                            const isCurrent = isStarted && index === input.length && status !== 'finished';
 
-                                    return (
-                                        <span key={index} className="relative inline-block">
-                                            {isCurrent && (
-                                                <span className="absolute left-0 -bottom-1 w-full h-[3px] bg-blue-500 animate-blink rounded-full"></span>
-                                            )}
-                                            <span className={`${charColor} ${charBg} transition-colors duration-100`}>
-                                                {char === ' ' ? '\u00A0' : char}
-                                            </span>
-                                        </span>
-                                    );
-                                })}
+                                            return (
+                                                <span key={index} className="relative inline-block">
+                                                    {isCurrent && (
+                                                        <span className="absolute left-0 -bottom-1 w-full h-[3px] bg-blue-500 animate-blink rounded-full"></span>
+                                                    )}
+                                                    <span className={`${charColor} ${charBg} transition-colors duration-100`}>
+                                                        {char}
+                                                    </span>
+                                                </span>
+                                            );
+                                        })}
+                                    </span>
+                                ))}
                             </div>
 
                             <input
@@ -598,19 +618,23 @@
                                 <div className="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mb-6 shadow-inner">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                 </div>
-                                <h2 className="text-4xl font-black text-slate-800 mb-4 tracking-tight">Time's Up!</h2>
+                                <h2 className="text-4xl font-black text-slate-800 mb-4 tracking-tight">
+                                    {timeLeft > 0
+                                        ? (language === 'en' ? 'Test Complete!' : '测试完成！')
+                                        : (language === 'en' ? "Time's Up!" : '时间到！')}
+                                </h2>
                                 <div className="flex gap-8 mb-8 text-left">
                                     <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 shadow-sm">
-                                        <p className="text-xs font-bold text-slate-400 uppercase mb-1 tracking-widest">Final Speed</p>
-                                        <p className="text-5xl font-black text-blue-600">{speed} <span className="text-lg text-slate-500 font-bold">{language === 'en' ? 'WPM' : 'CPM'}</span></p>
+                                        <p className="text-xs font-bold text-slate-400 uppercase mb-1 tracking-widest">{language === 'en' ? 'Final Speed' : '最终速度'}</p>
+                                        <p className="text-5xl font-black text-blue-600">{speed} <span className="text-lg text-slate-500 font-bold">{language === 'en' ? 'WPM' : '字/分钟'}</span></p>
                                     </div>
                                     <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 shadow-sm">
-                                        <p className="text-xs font-bold text-slate-400 uppercase mb-1 tracking-widest">Accuracy</p>
+                                        <p className="text-xs font-bold text-slate-400 uppercase mb-1 tracking-widest">{language === 'en' ? 'Accuracy' : '准确率'}</p>
                                         <p className="text-5xl font-black text-blue-600">{accuracy}%</p>
                                     </div>
                                 </div>
                                 <button onClick={initTest} className="px-12 py-4 bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold rounded-xl shadow-lg hover:shadow-blue-500/40 transition-all active:scale-95">
-                                    Start New Test
+                                    {language === 'en' ? 'Start New Test' : '再测一次'}
                                 </button>
                             </div>
                         )}
